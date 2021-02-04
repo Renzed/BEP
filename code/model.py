@@ -4,7 +4,6 @@ import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib
 import itertools as it
-
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 # from moviepy.video.io.bindings import mplfig_to_npimage
@@ -56,10 +55,9 @@ class Kuramoto:
         n = len(states)
         ownstates = np.tile(states, (n, 1)).transpose()
         rolledstates = self.strided_method(states)
-        calc = np.sum(self.coupling_fun(n, **self.coupling_fun_kwargs) * ((rolledstates - ownstates)),
+        calc = np.sum(self.coupling_fun(n, **self.coupling_fun_kwargs) * (np.sin(rolledstates - ownstates)),
                       axis=1)
         noise = self.noise_fun(n, **self.noise_fun_kwargs)
-        out = freqs + calc + noise
         return freqs + calc + noise
 
     def run(self, params: dict):
@@ -74,7 +72,7 @@ class Kuramoto:
         return solution
 
     @staticmethod
-    def draw(solution, timespan, filename=None):
+    def draw(solution, timespan):
         fig, ax = plt.subplots()
         size = len(solution[0])
         x, y = np.cos(solution[:, 0]), np.sin(solution[:, 0])
