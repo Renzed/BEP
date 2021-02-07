@@ -3,16 +3,15 @@ from tqdm import tqdm
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib
-import itertools as it
-matplotlib.use('TkAgg')
+matplotlib.use('Qt5Agg')
+from copy import deepcopy
 import matplotlib.pyplot as plt
 # from moviepy.video.io.bindings import mplfig_to_npimage
 # import moviepy.editor as mpy
 from matplotlib import animation
 
-
 def default_coupling(n, k=1):
-    return k/n * np.ones((n, n))
+    return k / n * np.ones((n, n))
 
 
 def nearest_neighbour(n, k=1):
@@ -24,8 +23,18 @@ def default_noise(n, D=1):
 
 
 def order_parameter(state):
-    number = sum(np.exp(state*1j))/len(state)
+    number = sum(np.exp(state * 1j)) / len(state)
     return abs(number), phase(number)
+
+
+def binder_cumulant(input):
+    # matrix = np.array(input)
+    # rho4 = np.mean(matrix**4,1)
+    # rho2 = np.mean(matrix**2,1)
+    # fraction = rho4/(3*(rho2**2))
+    # return 1-np.mean(fraction)
+    return 1
+
 
 class Kuramoto:
 
@@ -51,7 +60,7 @@ class Kuramoto:
         n = a.strides[0]
         return np.lib.stride_tricks.as_strided(a[L - 1:], (L, L), (-n, n))
 
-    def theta_diff(self, t, states, freqs):
+    def theta_diff_2(self, t, states, freqs):
         n = len(states)
         ownstates = np.tile(states, (n, 1)).transpose()
         rolledstates = self.strided_method(states)
@@ -60,7 +69,7 @@ class Kuramoto:
         noise = self.noise_fun(n, **self.noise_fun_kwargs)
         return freqs + calc + noise
 
-    def run(self, params: dict):
+    def run2(self, params: dict):
         solution = solve_ivp(self.theta_diff,
                              t_span=params['timespan'],
                              y0=self.oscillator_states_ini,
@@ -70,6 +79,50 @@ class Kuramoto:
                              atol=params['atol'],
                              max_step=params['max step'])
         return solution
+
+    def theta_diff(self, dt, states, freqs):
+        n = len(states)
+        ownstates = np.tile(states, (n, 1)).transpose()
+        rolledstates = self.strided_method(states)
+        calc = np.sum(self.coupling_fun(n, **self.coupling_fun_kwargs) * (np.sin(rolledstates - ownstates)),
+                      axis=1)
+        noise = self.noise_fun(n, **self.noise_fun_kwargs)
+        return dt * freqs + dt * calc + np.sqrt(dt) * noise
+
+    def theta_diff_linear(self, dt, states, freqs):
+        n = len(states)
+        ownstates = np.tile(states, (n, 1)).transpose()
+        rolledstates = self.strided_method(states)
+        calc = np.sum(self.coupling_fun(n, **self.coupling_fun_kwargs) * ((rolledstates - ownstates)),
+                      axis=1)
+        noise = self.noise_fun(n, **self.noise_fun_kwargs)
+        return dt * freqs + dt * calc + np.sqrt(dt) * noise
+
+    def run(self, params: dict):
+        t = 0
+        timestep = params['stepsize']
+        states = deepcopy(self.oscillator_states_ini)
+        solution = [states]
+        while t < params['timespan']:
+            dtheta = self.theta_diff(timestep, states, self.oscillator_feqs)
+            states += dtheta
+            # states = states % (2*np.pi)
+            solution.append(states)
+            t += timestep
+        return np.array(solution, dtype=object)
+
+    def run_linear(self, params: dict):
+        t = 0
+        timestep = params['stepsize']
+        states = deepcopy(self.oscillator_states_ini)
+        solution = [states]
+        while t < params['timespan']:
+            dtheta = self.theta_diff_linear(timestep, states, self.oscillator_feqs)
+            states += dtheta
+            # states = states % (2*np.pi)
+            solution.append(states)
+            t += timestep
+        return np.array(solution, dtype=object)
 
     @staticmethod
     def draw(solution, timespan):
@@ -105,7 +158,6 @@ if __name__ == '__main__':
 
     # model = Kuramoto(eigen_freqs, pos_ini)
 
-
     sim_params = {
         'timespan': [0, 20],
         'method': 'RK45',
@@ -117,17 +169,17 @@ if __name__ == '__main__':
     eigen_freqs = np.zeros(100)
     pos_ini = np.random.uniform(-1e-3, 1e-3, 100)
 
-    ntc_range = np.array([0.01,0.1,0.5,2.5])
+    ntc_range = np.array([0.01, 0.1, 0.5, 2.5])
     ntc = 0.1
     appendices = np.array([])
     for i in tqdm(range(1000)):
         model = Kuramoto(eigen_freqs, pos_ini,
                          coupling_fun=nearest_neighbour,
                          noise_fun_kwargs=dict(D=ntc))
-        result = model.run(sim_params)
+        result = model.run2(sim_params)
         appendices = np.append(appendices, result.y[:, -1])
 
-    plt.hist(appendices, range=(-0.01, 0.01), bins=100, weights=np.ones_like(appendices)/len(appendices))
+    plt.hist(appendices, range=(-0.01, 0.01), bins=100, weights=np.ones_like(appendices) / len(appendices))
 
     # movie = model.draw(result.y, sim_params['timespan'][1])
     #

@@ -1,5 +1,7 @@
 from model import Kuramoto, nearest_neighbour, order_parameter
 import numpy as np
+import matplotlib
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import itertools as it
 import parmap
@@ -15,7 +17,7 @@ def square_nn_coupling(n, K=1):
             if j - i == -1 or j - i == 1:
                 addition = np.eye(n, n, 0)
             elif j - i == 0:
-                addition = np.eye(n, n, 1) + np.eye(n, n, -1)
+                addition = np.eye(n, n, 1) + np.eye(n, n, -1) + np.eye(n, n, n-1) + np.eye(n, n, 1-n)
             else:
                 addition = np.eye(n, n, n)
             matrix[n * i:n * i + n, n * j:n * j + n] = addition
@@ -24,11 +26,8 @@ def square_nn_coupling(n, K=1):
 
 def multiprocessed_kuramoto(ef, pos, n_strength):
     sim_params = {
-        'timespan': [0, 10],
-        'method': 'RK23',
-        'rtol': 1e90,
-        'atol': 1e90,
-        'max step': 40 / 2400
+        'timespan': 5,
+        'stepsize': 1/30
     }
     model = Kuramoto(ef, pos,
                      coupling_fun=square_nn_coupling,
@@ -38,15 +37,6 @@ def multiprocessed_kuramoto(ef, pos, n_strength):
 
 
 if __name__ == "__main__":
-
-    nsims = 50
-    noise_range = np.linspace(0, 50, nsims)
-
-    eigen_freqs = np.zeros(2500)
-    pos_ini = np.random.uniform(0, 2 * np.pi, 2500)
-    args = it.product([eigen_freqs], [pos_ini], noise_range)
-
-    results = parmap.starmap(multiprocessed_kuramoto, list(args), pm_pbar=True, pm_processes=min(5, nsims))
 
     # for dictionary in results:
     #     result = dictionary['output']
@@ -60,29 +50,46 @@ if __name__ == "__main__":
     #     plt.ylim(0, 1)
     #     plt.plot(result.t, np.array([order_parameter(result.y[:, i]) for i in range(l)])[:, 0])
 
-    with open('backup.npy','wb') as f:
-        np.save(f, results)
+    # with open('backup.npy','wb') as f:
+    #     np.save(f, results)
 
-    plt.figure()
+    nsims = 50
+    noise_range = np.linspace(0, 3, nsims)
+
+    eigen_freqs = np.zeros(100)
+    pos_ini = np.random.uniform(0, 2 * np.pi, 100)
+    args = list(it.product([eigen_freqs], [pos_ini], noise_range))
+
+    averageingnum = 500
+    orders = np.zeros(50)
+    for k in range(averageingnum):
+        print(f'Calculating run {k+1} out of {averageingnum}')
+        results = parmap.starmap(multiprocessed_kuramoto, args, pm_pbar=True, pm_processes=min(5, nsims))
+
+        noises = []
+        suborders = []
+        for i in results:
+            noises.append(i['noise'])
+            avterm = np.average(np.array([order_parameter(i['output'][-(j + 1), :].astype(np.float64))
+                                          for j in range(60)])[:, 0])
+            suborders.append(avterm)
+        orders += np.array(suborders)/averageingnum
+    # with open('20x20noisestrength.npy', 'wb') as f:
+    #     np.save(f, orders)
+    # plt.figure()
     plt.xlabel('Noise-strength D')
     plt.ylabel('Order parameter')
-    plt.ylim(0, 1)
-    noises = []
-    orders = []
-    for i in results:
-        noises.append(i['noise'])
-        avterm = np.average(np.array([order_parameter(i['output'].y[:, -(j + 1)]) for j in range(60)])[:, 0])
-        orders.append(avterm)
+    plt.ylim(0, 1.01)
+    plt.xlim(min(noises), max(noises))
     plt.plot(noises, orders)
 
-
-    def func(x, a, b, c):
-        return c * x ** 6 + a * x ** 4 + b * x ** 2 + 1
-
-
-    popt, pcov = curve_fit(func, noises, orders)
-    xnew = np.linspace(min(noises), max(noises), 20)
-    spline = make_interp_spline(noises, orders, k=1)
-    smoothed = spline(xnew)
-    plt.plot(xnew, smoothed)
-    plt.plot(xnew, func(xnew, *popt))
+    # def func(x, a, b, c):
+    #     return c * x ** 6 + a * x ** 4 + b * x ** 2 + 1
+    #
+    #
+    # popt, pcov = curve_fit(func, noises, orders)
+    # xnew = np.linspace(min(noises), max(noises), 20)
+    # spline = make_interp_spline(noises, orders, k=1)
+    # smoothed = spline(xnew)
+    # plt.plot(xnew, smoothed)
+    # plt.plot(xnew, func(xnew, *popt))
