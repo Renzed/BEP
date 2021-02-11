@@ -1,10 +1,11 @@
-from model import Kuramoto, nearest_neighbour, order_parameter
+from model import Kuramoto, nearest_neighbour, order_parameter, binder_cumulant
 import numpy as np
 import matplotlib
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import itertools as it
 import parmap
+import pickle
 from scipy.interpolate import make_interp_spline, BSpline
 from scipy.optimize import curve_fit
 
@@ -26,12 +27,12 @@ def square_nn_coupling(n, K=1):
 
 def multiprocessed_kuramoto(ef, pos, n_strength):
     sim_params = {
-        'timespan': 5,
+        'timespan': 20,
         'stepsize': 1/30
     }
     model = Kuramoto(ef, pos,
                      coupling_fun=square_nn_coupling,
-                     noise_fun_kwargs=dict(D=n_strength))
+                     noise_fun_kwargs=dict(D=0))
     subresult = model.run(sim_params)
     return dict(output=subresult, noise=n_strength)
 
@@ -54,28 +55,32 @@ if __name__ == "__main__":
     #     np.save(f, results)
 
     nsims = 50
-    noise_range = np.linspace(0, 3, nsims)
+    noise_range = np.linspace(0, 2.5, nsims)
 
-    eigen_freqs = np.zeros(100)
-    pos_ini = np.random.uniform(0, 2 * np.pi, 100)
-    args = list(it.product([eigen_freqs], [pos_ini], noise_range))
-
-    averageingnum = 500
+    averageingnum = 100
     orders = np.zeros(50)
+    full_order_result = {noise: [] for noise in noise_range}
     for k in range(averageingnum):
+        eigen_freqs = list(np.random.normal(0, noise_range**2, (400, nsims)).transpose())
+        pos_ini = np.random.uniform(0, 2 * np.pi, 400)
+        # args = list(it.product(eigen_freqs, [pos_ini], [0]))
+        subargs = list(it.product(eigen_freqs, [pos_ini]))
+        args = [tuple(list(subargs[i])+[noise_range[i]]) for i in range(nsims)]
         print(f'Calculating run {k+1} out of {averageingnum}')
         results = parmap.starmap(multiprocessed_kuramoto, args, pm_pbar=True, pm_processes=min(5, nsims))
 
         noises = []
-        suborders = []
+        orderplot = []
         for i in results:
             noises.append(i['noise'])
-            avterm = np.average(np.array([order_parameter(i['output'][-(j + 1), :].astype(np.float64))
-                                          for j in range(60)])[:, 0])
-            suborders.append(avterm)
-        orders += np.array(suborders)/averageingnum
-    # with open('20x20noisestrength.npy', 'wb') as f:
-    #     np.save(f, orders)
+            suborders = np.array([order_parameter(i['output'][j, :].astype(np.float64))
+                                  for j in range(len(i['output'][:, 0]))])[:, 0]
+            full_order_result[i["noise"]].append(suborders)
+            orderplot.append(np.average(suborders[-60:]))
+
+        orders += np.array(orderplot)/averageingnum
+    with open('20x20 full result 20s quenched.pkl', 'wb') as f:
+        pickle.dump(full_order_result, f)
     # plt.figure()
     plt.xlabel('Noise-strength D')
     plt.ylabel('Order parameter')
@@ -93,3 +98,4 @@ if __name__ == "__main__":
     # smoothed = spline(xnew)
     # plt.plot(xnew, smoothed)
     # plt.plot(xnew, func(xnew, *popt))
+    plt.show()

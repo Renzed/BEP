@@ -1,7 +1,7 @@
 from cmath import phase
 from tqdm import tqdm
 import numpy as np
-from scipy.integrate import solve_ivp
+# from scipy.integrate import solve_ivp
 import matplotlib
 matplotlib.use('Qt5Agg')
 from copy import deepcopy
@@ -27,14 +27,20 @@ def order_parameter(state):
     return abs(number), phase(number)
 
 
-def binder_cumulant(input):
-    # matrix = np.array(input)
-    # rho4 = np.mean(matrix**4,1)
-    # rho2 = np.mean(matrix**2,1)
-    # fraction = rho4/(3*(rho2**2))
-    # return 1-np.mean(fraction)
-    return 1
+def binder_cumulant(input, stationaryno):
+    matrix = np.array(input)
+    rho4 = np.mean(matrix[:,-stationaryno:]**4, 1)
+    rho2 = np.mean(matrix[:,-stationaryno:]**2, 1)
+    fraction = rho4/(3*(rho2**2))
+    return 1-np.mean(fraction)
 
+
+def fluctuation(input, L, stationaryno):
+    matrix = np.array(input)
+    rho2 = np.mean(matrix[:,-stationaryno:]**2, 1)
+    rho = np.mean(matrix[:,-stationaryno:], 1)
+    avterm = np.mean(rho2-rho**2)
+    return avterm*(L**2)
 
 class Kuramoto:
 
@@ -101,15 +107,13 @@ class Kuramoto:
     def run(self, params: dict):
         t = 0
         timestep = params['stepsize']
-        states = deepcopy(self.oscillator_states_ini)
-        solution = [states]
+        solution = [self.oscillator_states_ini]
         while t < params['timespan']:
-            dtheta = self.theta_diff(timestep, states, self.oscillator_feqs)
-            states += dtheta
+            dtheta = self.theta_diff(timestep, solution[-1], self.oscillator_feqs)
             # states = states % (2*np.pi)
-            solution.append(states)
+            solution.append(solution[-1]+dtheta)
             t += timestep
-        return np.array(solution, dtype=object)
+        return np.array(solution)
 
     def run_linear(self, params: dict):
         t = 0
@@ -153,33 +157,20 @@ class Kuramoto:
 
 
 if __name__ == '__main__':
-    # eigen_freqs = np.random.normal(1, 2, 100)
-    # pos_ini = np.random.uniform(0, 2 * np.pi, 100)
-
-    # model = Kuramoto(eigen_freqs, pos_ini)
+    syssize = 100
+    eigen_freqs = np.zeros(syssize)
+    pos_ini = np.random.uniform(0,2*np.pi,syssize)
 
     sim_params = {
-        'timespan': [0, 20],
-        'method': 'RK45',
-        'rtol': 1e90,
-        'atol': 1e90,
-        'max step': 20 / 2400
+        'timespan': 5,
+        'stepsize': 1/60
     }
 
-    eigen_freqs = np.zeros(100)
-    pos_ini = np.random.uniform(-1e-3, 1e-3, 100)
+    model = Kuramoto(eigen_freqs, pos_ini, noise_fun_kwargs=dict(D=0))
+    result = model.run(sim_params)
+    model.draw(result, 5)
 
-    ntc_range = np.array([0.01, 0.1, 0.5, 2.5])
-    ntc = 0.1
-    appendices = np.array([])
-    for i in tqdm(range(1000)):
-        model = Kuramoto(eigen_freqs, pos_ini,
-                         coupling_fun=nearest_neighbour,
-                         noise_fun_kwargs=dict(D=ntc))
-        result = model.run2(sim_params)
-        appendices = np.append(appendices, result.y[:, -1])
-
-    plt.hist(appendices, range=(-0.01, 0.01), bins=100, weights=np.ones_like(appendices) / len(appendices))
+    # plt.hist(appendices, range=(-0.01, 0.01), bins=100, weights=np.ones_like(appendices) / len(appendices))
 
     # movie = model.draw(result.y, sim_params['timespan'][1])
     #
