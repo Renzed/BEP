@@ -1,7 +1,8 @@
 from cmath import phase
+from collections import deque
 from tqdm import tqdm
 import numpy as np
-# from scipy.integrate import solve_ivp
+from scipy.integrate import solve_ivp
 import matplotlib
 matplotlib.use('Qt5Agg')
 from copy import deepcopy
@@ -9,6 +10,7 @@ import matplotlib.pyplot as plt
 # from moviepy.video.io.bindings import mplfig_to_npimage
 # import moviepy.editor as mpy
 from matplotlib import animation
+from numba import jit, njit
 
 def default_coupling(n, k=1):
     return k / n * np.ones((n, n))
@@ -27,72 +29,91 @@ def order_parameter(state):
     return abs(number), phase(number)
 
 
-def binder_cumulant(input, stationaryno):
-    matrix = np.array(input)
-    rho4 = np.mean(matrix[:,-stationaryno:]**4, 1)
-    rho2 = np.mean(matrix[:,-stationaryno:]**2, 1)
+def binder_cumulant(inlist, stationaryno):
+    matrix = np.array(inlist)
+    rho4 = np.mean(matrix[:, -stationaryno:]**4, 1)
+    rho2 = np.mean(matrix[:, -stationaryno:]**2, 1)
     fraction = rho4/(3*(rho2**2))
     return 1-np.mean(fraction)
 
 
-def fluctuation(input, L, stationaryno):
-    matrix = np.array(input)
-    rho2 = np.mean(matrix[:,-stationaryno:]**2, 1)
-    rho = np.mean(matrix[:,-stationaryno:], 1)
+def fluctuation(inlist, L, stationaryno):
+    matrix = np.array(inlist)
+    rho2 = np.mean(matrix[:, -stationaryno:]**2, 1)
+    rho = np.mean(matrix[:, -stationaryno:], 1)
     avterm = np.mean(rho2-rho**2)
     return avterm*(L**2)
 
 class Kuramoto:
 
     def __init__(self, osc_freqs: np.ndarray, initials: np.ndarray,
-                 coupling_fun: type(default_coupling) = default_coupling,
-                 coupling_fun_kwargs: dict = dict(),
-                 noise_fun: type(default_coupling) = default_noise,
-                 noise_fun_kwargs: dict = dict()):
+                 coupling_fun: type(default_coupling) = default_coupling,  # defines the function which generates the coupling matrix
+                 coupling_fun_kwargs: dict = dict(),  # give the arguments for said function
+                 noise_fun: type(default_coupling) = default_noise,  # defines the noise generating function
+                 noise_fun_kwargs: dict = dict(),
+                 static_coupling: bool = True):  # plus its arguments
         self.oscillator_states_ini = initials
+        self.n = len(initials)
         self.oscillator_feqs = osc_freqs
         self.oscillator_count = len(initials)
         self.coupling_fun = coupling_fun
         self.coupling_fun_kwargs = coupling_fun_kwargs
         self.noise_fun = noise_fun
         self.noise_fun_kwargs = noise_fun_kwargs
-        self.solution = None
+        self.solution = None  # Initialization
+        if static_coupling:  # switches for faster execution
+            self.coupling_matrix = self.coupling_fun(self.n, **self.coupling_fun_kwargs)
+            if self.noise_fun == default_noise:
+                self.differential_fun = self.theta_diff_static_gaussian
+            else:
+                self.differential_fun = self.theta_diff_static
 
     @staticmethod
-    def strided_method(ar):
+    def strided_method(ar):  # This function is a fast method for calculating a circulant matrix
         ar = ar[::-1]
         a = np.concatenate((ar, ar[:-1]))
         L = len(ar)
         n = a.strides[0]
         return np.lib.stride_tricks.as_strided(a[L - 1:], (L, L), (-n, n))
 
-    def theta_diff_2(self, t, states, freqs):
-        n = len(states)
-        ownstates = np.tile(states, (n, 1)).transpose()
-        rolledstates = self.strided_method(states)
-        calc = np.sum(self.coupling_fun(n, **self.coupling_fun_kwargs) * (np.sin(rolledstates - ownstates)),
-                      axis=1)
-        noise = self.noise_fun(n, **self.noise_fun_kwargs)
-        return freqs + calc + noise
+    # def theta_diff_2(self, t, states, freqs):  # differential
+    #     n = len(states)
+    #     ownstates = np.tile(states, (n, 1)).transpose()
+    #     rolledstates = self.strided_method(states)
+    #     calc = np.sum(self.coupling_fun(n, **self.coupling_fun_kwargs) * (np.sin(rolledstates - ownstates)),
+    #                   axis=1)
+    #     noise = self.noise_fun(n, **self.noise_fun_kwargs)
+    #     return freqs + calc + noise
+    #
+    # def run2(self, params: dict):  # scipy method for solving ivps
+    #     solution = solve_ivp(self.theta_diff_2,
+    #                          t_span=params['timespan'],
+    #                          y0=self.oscillator_states_ini,
+    #                          method=params['method'],
+    #                          args=(self.oscillator_feqs,),
+    #                          rtol=params['rtol'],
+    #                          atol=params['atol'],
+    #                          max_step=params['max step'])
+    #     return solution
 
-    def run2(self, params: dict):
-        solution = solve_ivp(self.theta_diff,
-                             t_span=params['timespan'],
-                             y0=self.oscillator_states_ini,
-                             method=params['method'],
-                             args=(self.oscillator_feqs,),
-                             rtol=params['rtol'],
-                             atol=params['atol'],
-                             max_step=params['max step'])
-        return solution
-
-    def theta_diff(self, dt, states, freqs):
-        n = len(states)
-        ownstates = np.tile(states, (n, 1)).transpose()
-        rolledstates = self.strided_method(states)
-        calc = np.sum(self.coupling_fun(n, **self.coupling_fun_kwargs) * (np.sin(rolledstates - ownstates)),
+    def theta_diff(self, dt, states, freqs):  # calculates the differential vector
+        ownstates = np.tile(states, (self.n, 1)).transpose()  # This creates a sq matrix with each state duplicated on the row
+        rolledstates = self.strided_method(states)  # This circulates the states
+        calc = np.sum(self.coupling_fun(self.n, **self.coupling_fun_kwargs) * (np.sin(rolledstates - ownstates)),
                       axis=1)
-        noise = self.noise_fun(n, **self.noise_fun_kwargs)
+        noise = self.noise_fun(self.n, **self.noise_fun_kwargs)
+        return dt * freqs + dt * calc + np.sqrt(dt) * noise
+
+    def theta_diff_static(self, dt, states, freqs):  # calculates the differential vector
+        ownstates = np.tile(states, (self.n, 1))  # This creates a sq matrix with each state duplicated on the column
+        calc = np.sum(self.coupling_matrix * (np.sin(ownstates-ownstates.T)), axis=1)
+        noise = self.noise_fun(self.n, **self.noise_fun_kwargs)
+        return dt * freqs + dt * calc + np.sqrt(dt) * noise
+
+    def theta_diff_static_gaussian(self, dt, states, freqs):  # calculates the differential vector
+        ownstates = np.tile(states, (self.n, 1))  # This creates a sq matrix with each state duplicated on the column
+        calc = np.sum(self.coupling_matrix * (np.sin(ownstates-ownstates.T)), axis=1)
+        noise = np.random.normal(0, self.noise_fun_kwargs['D'], self.n)
         return dt * freqs + dt * calc + np.sqrt(dt) * noise
 
     def theta_diff_linear(self, dt, states, freqs):
@@ -107,10 +128,9 @@ class Kuramoto:
     def run(self, params: dict):
         t = 0
         timestep = params['stepsize']
-        solution = [self.oscillator_states_ini]
+        solution = deque([self.oscillator_states_ini])
         while t < params['timespan']:
-            dtheta = self.theta_diff(timestep, solution[-1], self.oscillator_feqs)
-            # states = states % (2*np.pi)
+            dtheta = self.differential_fun(timestep, solution[-1], self.oscillator_feqs)
             solution.append(solution[-1]+dtheta)
             t += timestep
         return np.array(solution)

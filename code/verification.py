@@ -25,9 +25,9 @@ def square_nn_coupling(n, K=1):
     return K * matrix
 
 
-def multiprocessed_kuramoto(ef, pos, n_strength):
+def multiprocessed_kuramoto(ef, pos, n_strength):  # we define a function so that we can multiprocess
     sim_params = {
-        'timespan': 20,
+        'timespan': 2*60,
         'stepsize': 1/30
     }
     model = Kuramoto(ef, pos,
@@ -54,20 +54,20 @@ if __name__ == "__main__":
     # with open('backup.npy','wb') as f:
     #     np.save(f, results)
 
-    nsims = 50
+    nsims = 50  # amount of noise points
     noise_range = np.linspace(0, 2.5, nsims)
-
-    averageingnum = 100
-    orders = np.zeros(50)
+    nosc = 100
+    averageingnum = 100  # amount of runs
+    orders = np.zeros(nsims)
     full_order_result = {noise: [] for noise in noise_range}
     for k in range(averageingnum):
-        eigen_freqs = list(np.random.normal(0, noise_range**2, (400, nsims)).transpose())
-        pos_ini = np.random.uniform(0, 2 * np.pi, 400)
+        eigen_freqs = list(np.random.normal(0, noise_range**2, (nosc, nsims)).transpose())
+        pos_ini = np.random.uniform(0, 2 * np.pi, nosc)
         # args = list(it.product(eigen_freqs, [pos_ini], [0]))
         subargs = list(it.product(eigen_freqs, [pos_ini]))
         args = [tuple(list(subargs[i])+[noise_range[i]]) for i in range(nsims)]
         print(f'Calculating run {k+1} out of {averageingnum}')
-        results = parmap.starmap(multiprocessed_kuramoto, args, pm_pbar=True, pm_processes=min(5, nsims))
+        results = parmap.starmap(multiprocessed_kuramoto, args, pm_pbar=True, pm_processes=min(5, nsims))  # multiprocessing
 
         noises = []
         orderplot = []
@@ -79,7 +79,7 @@ if __name__ == "__main__":
             orderplot.append(np.average(suborders[-60:]))
 
         orders += np.array(orderplot)/averageingnum
-    with open('20x20 full result 20s quenched.pkl', 'wb') as f:
+    with open('10x10 full result 120s quenched.pkl', 'wb') as f:  # save data
         pickle.dump(full_order_result, f)
     # plt.figure()
     plt.xlabel('Noise-strength D')

@@ -6,16 +6,16 @@ matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import pickle
 
-with open('10x10 full result 20s quenched.pkl', 'rb') as f:
+with open('10x10 full result long.pkl', 'rb') as f:
     d10 = pickle.load(f)
 
-with open('20x20 full result 20s quenched.pkl', 'rb') as f:
+with open('20x20 full result long.pkl', 'rb') as f:
     d20 = pickle.load(f)
 
-with open('30x30 full result 20s quenched.pkl', 'rb') as f:
+with open('30x30 full result.pkl', 'rb') as f:
     d30 = pickle.load(f)
 
-ssn = 60
+ssn = 300
 
 plt.figure()
 plt.xlabel('Noise strength D')
@@ -42,4 +42,15 @@ plt.plot(x, f10, 'o-', label='10x10')
 plt.plot(x, f20, 'x-', label='20x20')
 plt.plot(x, f30, 'x-', label='30x30')
 plt.legend()
+
+# plt.figure()
+# plt.xlabel('Noise strength D')
+# plt.ylabel('Order parameter')
+# o10 = [np.average(np.array(d10[i])[:, -ssn:]) for i in d10]
+# o20 = [np.average(np.array(d20[i])[:, -ssn:]) for i in d20]
+# plt.xlim(min(x),max(x))
+# plt.plot(x, o10, 'o-', label='10x10')
+# plt.plot(x, o20, 'o-', label='20x20')
+# plt.legend()
+
 plt.show()
