@@ -4,13 +4,14 @@ from tqdm import tqdm
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib
+
 matplotlib.use('Qt5Agg')
 from copy import deepcopy
 import matplotlib.pyplot as plt
 # from moviepy.video.io.bindings import mplfig_to_npimage
 # import moviepy.editor as mpy
 from matplotlib import animation
-from numba import jit, njit
+
 
 def default_coupling(n, k=1):
     return k / n * np.ones((n, n))
@@ -31,23 +32,57 @@ def order_parameter(state):
 
 def binder_cumulant(inlist, stationaryno):
     matrix = np.array(inlist)
-    rho4 = np.mean(matrix[:, -stationaryno:]**4, 1)
-    rho2 = np.mean(matrix[:, -stationaryno:]**2, 1)
-    fraction = rho4/(3*(rho2**2))
-    return 1-np.mean(fraction)
+    rho4 = np.mean(matrix[:, -stationaryno:] ** 4, 1)
+    rho2 = np.mean(matrix[:, -stationaryno:] ** 2, 1)
+    fraction = rho4 / (3 * (rho2 ** 2))
+    return 1 - np.mean(fraction)
 
 
 def fluctuation(inlist, L, stationaryno):
     matrix = np.array(inlist)
-    rho2 = np.mean(matrix[:, -stationaryno:]**2, 1)
+    rho2 = np.mean(matrix[:, -stationaryno:] ** 2, 1)
     rho = np.mean(matrix[:, -stationaryno:], 1)
-    avterm = np.mean(rho2-rho**2)
-    return avterm*(L**2)
+    avterm = np.mean(rho2 - rho ** 2)
+    return avterm * (L ** 2)
+
+
+def d(n, k):
+    return int(n == k)
+
+
+def max_eigenvalues_matrix(output, coupling_matrix, ssn):
+    output = np.array(output)
+    eigenvals = 0.
+    for i in range(ssn):
+        ownstates = np.tile(output[-i, :], (output.shape[1], 1))
+        matrix = coupling_matrix * np.cos(ownstates - ownstates.T)
+        eigenvals += max(np.linalg.eigh(matrix)[0]) / ssn
+    return eigenvals
+
+
+def max_eigenvalue(output, coupling_matrix):
+    # output = np.array(output)
+    eigenvals = 0.
+    # ownstates = np.tile(output, (len(output), 1))
+    # diffstates = ownstates - ownstates.T
+    # states_vec = np.repeat(output, len(output)).reshape((len(output), len(output)))
+    # diffstates = states_vec.T-states_vec
+    states_vec = np.zeros((len(output), len(output)))+output
+    diffstates = states_vec - states_vec.T
+    matrix = coupling_matrix * np.cos(diffstates)
+    eigenvals += max(np.linalg.eigh(matrix)[0])
+    return eigenvals
+
+
+def velocity(output, dt):
+    return (output[1:, :]-output[:-1, :])/dt
+
 
 class Kuramoto:
 
     def __init__(self, osc_freqs: np.ndarray, initials: np.ndarray,
-                 coupling_fun: type(default_coupling) = default_coupling,  # defines the function which generates the coupling matrix
+                 coupling_fun: type(default_coupling) = default_coupling,  # defines the function which generates the
+                 # coupling matrix
                  coupling_fun_kwargs: dict = dict(),  # give the arguments for said function
                  noise_fun: type(default_coupling) = default_noise,  # defines the noise generating function
                  noise_fun_kwargs: dict = dict(),
@@ -97,7 +132,8 @@ class Kuramoto:
     #     return solution
 
     def theta_diff(self, dt, states, freqs):  # calculates the differential vector
-        ownstates = np.tile(states, (self.n, 1)).transpose()  # This creates a sq matrix with each state duplicated on the row
+        ownstates = np.tile(states, (self.n, 1)).transpose()  # This creates a sq matrix with each state duplicated
+        # on the row
         rolledstates = self.strided_method(states)  # This circulates the states
         calc = np.sum(self.coupling_fun(self.n, **self.coupling_fun_kwargs) * (np.sin(rolledstates - ownstates)),
                       axis=1)
@@ -106,13 +142,13 @@ class Kuramoto:
 
     def theta_diff_static(self, dt, states, freqs):  # calculates the differential vector
         ownstates = np.tile(states, (self.n, 1))  # This creates a sq matrix with each state duplicated on the column
-        calc = np.sum(self.coupling_matrix * (np.sin(ownstates-ownstates.T)), axis=1)
+        calc = np.sum(self.coupling_matrix * (np.sin(ownstates - ownstates.T)), axis=1)
         noise = self.noise_fun(self.n, **self.noise_fun_kwargs)
         return dt * freqs + dt * calc + np.sqrt(dt) * noise
 
     def theta_diff_static_gaussian(self, dt, states, freqs):  # calculates the differential vector
         ownstates = np.tile(states, (self.n, 1))  # This creates a sq matrix with each state duplicated on the column
-        calc = np.sum(self.coupling_matrix * (np.sin(ownstates-ownstates.T)), axis=1)
+        calc = np.sum(self.coupling_matrix * (np.sin(ownstates - ownstates.T)), axis=1)
         noise = np.random.normal(0, self.noise_fun_kwargs['D'], self.n)
         return dt * freqs + dt * calc + np.sqrt(dt) * noise
 
@@ -131,7 +167,7 @@ class Kuramoto:
         solution = deque([self.oscillator_states_ini])
         while t < params['timespan']:
             dtheta = self.differential_fun(timestep, solution[-1], self.oscillator_feqs)
-            solution.append(solution[-1]+dtheta)
+            solution.append(solution[-1] + dtheta)
             t += timestep
         return np.array(solution)
 
@@ -179,11 +215,11 @@ class Kuramoto:
 if __name__ == '__main__':
     syssize = 100
     eigen_freqs = np.zeros(syssize)
-    pos_ini = np.random.uniform(0,2*np.pi,syssize)
+    pos_ini = np.random.uniform(0, 2 * np.pi, syssize)
 
     sim_params = {
         'timespan': 5,
-        'stepsize': 1/60
+        'stepsize': 1 / 60
     }
 
     model = Kuramoto(eigen_freqs, pos_ini, noise_fun_kwargs=dict(D=0))
