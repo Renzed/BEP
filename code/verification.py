@@ -9,6 +9,7 @@ import pickle
 import time
 from scipy.interpolate import make_interp_spline, BSpline
 from scipy.optimize import curve_fit
+from scipy.special import erf
 
 
 def square_nn_coupling(n, K=1):
@@ -55,25 +56,25 @@ if __name__ == "__main__":
     # with open('backup.npy','wb') as f:
     #     np.save(f, results)
 
-    nsims = 100  # amount of noise points
-    noise_range = np.linspace(0, 2.5, nsims)
+    nsims = 50  # amount of noise points
+    noise_range = np.linspace(0.001, 1, nsims)
     nosc = 10**2
     mat_coupl = square_nn_coupling(nosc)
     ssn = 60
 
-    averageingnum = 25  # amount of runs
+    averageingnum = 200  # amount of runs
     orders = np.zeros(nsims)
     factors = np.zeros(nsims)
     full_order_result = {noise: [] for noise in noise_range}
     full_velocity_result = {noise: [] for noise in noise_range}
     for k in range(averageingnum):
-        eigen_freqs = list(np.random.normal(0, noise_range**2, (nosc, nsims)).transpose())
+        eigen_freqs = list(np.random.normal(0, noise_range, (nosc, nsims)).transpose())
         pos_ini = np.random.uniform(0, 2 * np.pi, nosc)
         # args = list(it.product(eigen_freqs, [pos_ini], [0]))
         subargs = list(it.product(eigen_freqs, [pos_ini]))
         args = [tuple(list(subargs[i])+[noise_range[i]]) for i in range(nsims)]
         print(f'Calculating run {k+1} out of {averageingnum}')
-        results = parmap.starmap(multiprocessed_kuramoto, args, pm_pbar=True, pm_processes=min(5, nsims))  # multiprocessing
+        results = parmap.starmap(multiprocessed_kuramoto, args, pm_pbar=True, pm_processes=min(4, nsims))  # multiprocessing
 
         noises = []
         orderplot = []
@@ -94,10 +95,10 @@ if __name__ == "__main__":
             orderplot.append(np.average(suborders[-ssn:]))
 
         orders += np.array(orderplot)/averageingnum
-    # with open('10x10 full result 240s quenched 1/15dt.pkl', 'wb') as f:  # save data
-    #     pickle.dump(full_order_result, f)
-    # with open('10x10 velocity result 240s quenched 1/15dt.pkl', 'wb') as f:  # save data
-    #     pickle.dump(full_velocity_result, f)
+    with open('10x10 full result 240s quenched 1div15dt frsk.pkl', 'wb') as f:  # save data
+        pickle.dump(full_order_result, f)
+    with open('10x10 velocity result 240s quenched 1div15dt frsk.pkl', 'wb') as f:  # save data
+        pickle.dump(full_velocity_result, f)
     # plt.figure()
     # plt.hist()
     plt.xlabel('Noise-strength D')
@@ -107,8 +108,10 @@ if __name__ == "__main__":
     plt.plot(noises, orders)
     plt.figure()
 
+    print(np.max(np.abs(np.array(noises)-noise_range)))
+
     def fractionapprox(r, sigma, K=1):
-        return r+(sigma/(K*r))*(np.exp(-K*r**2/(2*sigma**2)))/(np.sqrt(2*np.pi))
+        return r+(sigma/(K*r))*(np.exp(-(K*r)**2/(2*sigma**2)))/(np.sqrt(2*np.pi))
 
     plt.plot(noises, factors)
     plt.xlabel('Noise strength (D)')
@@ -117,6 +120,7 @@ if __name__ == "__main__":
     plt.figure()
     plt.plot(orders, factors, label='Simulated')
     plt.plot(orders, fractionapprox(orders, noise_range), label='Approximated')
+    plt.plot(orders, erf(orders/(noise_range*np.sqrt(2))), label='Erf approx')
     plt.legend()
     plt.xlabel('Order parameter $r$')
     plt.ylabel('Synchronized fraction $f$')
@@ -124,6 +128,7 @@ if __name__ == "__main__":
     plt.figure()
     plt.plot(noise_range/orders, factors, label='Simulated')
     plt.plot(noise_range/orders, fractionapprox(orders, noise_range), label='Approximated')
+    plt.plot(noise_range/orders, erf(orders/(noise_range*np.sqrt(2))), label='Erf approx')
     plt.legend()
     plt.xlabel('$\\sigma/Kr$')
     plt.ylabel('Synchronized fraction $f$')
