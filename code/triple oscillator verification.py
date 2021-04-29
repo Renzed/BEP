@@ -18,6 +18,7 @@ def multiprocessed_kuramoto(ef, pos, n_strength):  # we define a function so tha
 
 
 if __name__ == "__main__":
+    plt.figure()
     nsims = 100
     noise_range = np.linspace(0, 9, nsims)
     averagingnum = 800

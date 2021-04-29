@@ -36,6 +36,23 @@ def matrix_coupling(n, mat=''):
         return mat
 
 
+def gen_coupled_rings(ringsize, coupling, n_rings):
+    nodes = []
+    edges = []
+    conn_edges = []
+    for i in range(n_rings):
+        nodes += [j + 1 + ringsize * i for j in range(ringsize)]
+        edges += [(j + 1 + i * ringsize, (j + 1) % ringsize + 1 + i * ringsize) for j in range(ringsize)]
+        conn_edges += [(1 + i * ringsize, ((i + 1) * ringsize + 1) % (n_rings * ringsize), coupling)]
+    G = networkx.Graph()
+    # print(nodes, edges, conn_edges)
+    G.add_nodes_from(nodes)
+    G.add_edges_from(edges)
+    G.add_weighted_edges_from(conn_edges)
+    # networkx.draw(G)
+    return networkx.to_numpy_array(G)
+
+
 if __name__ == "__main__":
     halter_size = 10
     conn_length = 0
@@ -43,17 +60,17 @@ if __name__ == "__main__":
     nbins = 25
     n_res = 100
     n_cores = 5
-    noise_range = np.linspace(0, 2.5, n_res)
+    noise_range = np.linspace(0, 2, n_res)
     quenched_noise_range = [.2]  # np.linspace(0, 2, 10)
     shifted_mean = 1
     means = [0 if i < halter_size + conn_length / 2 else shifted_mean for i in range(2 * halter_size + conn_length)]
     averaging_number = 1000
-    matrix = networkx.to_numpy_array(networkx.barbell_graph(halter_size, conn_length))
     popt_arr = []
     for quenched_noise in quenched_noise_range:
         print(f"sigma={quenched_noise:.2f}")
         for noise_index in tqdm(range(len(noise_range))):
             histrange = [-noise_range[noise_index] - 1, 1 + shifted_mean + int(np.ceil(noise_range[noise_index] / 1.5))]
+            matrix = gen_coupled_rings(halter_size, noise_range[noise_index], 2)
             sub_args = [(quenched_noise, matrix, means, ssn, nbins, histrange, noise_range[noise_index]) for i in
                         range(averaging_number)]
             temp_results = pm.starmap(multiprocessed_kuramoto, sub_args, pm_processes=min(n_cores, len(sub_args)))
@@ -72,12 +89,12 @@ if __name__ == "__main__":
             plt.xlabel('Velocity (rad/s)')
             plt.ylabel('Probability')
             plt.savefig(
-                f'figures/10plus10plus0barbell/sigma{quenched_noise:.2f}D{noise_range[noise_index]:.2f}gap{shifted_mean}average{averaging_number}.png')
+                f'figures/10plus10plus0ring/sigma{quenched_noise:.2f}K{noise_range[noise_index]:.2f}gap{shifted_mean}average{averaging_number}.png')
             plt.close('all')
         plt.figure()
         plt.xlabel('Noise strength $D$')
         plt.ylabel('Separation parameter')
         plt.plot(noise_range, [np.abs(separation(i[1][0], i[1][1], i[1][2], i[1][2])) for i in popt_arr])
-        plt.savefig(f'figures/10plus10plus0barbell/sigma{quenched_noise:.2f}separation.png')
-        with open(f'sigma{quenched_noise:.2f}average{averaging_number}.npy', 'wb') as f:
-            np.save(f, np.array(popt_arr, dtype=object))
+        plt.savefig(f'figures/10plus10plus0ring/sigma{quenched_noise:.2f}separation.png')
+        # with open(f'sigma{quenched_noise:.2f}average{averaging_number}.npy', 'wb') as f:
+        #     np.save(f, np.array(popt_arr, dtype=object))
