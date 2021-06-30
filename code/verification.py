@@ -57,8 +57,9 @@ if __name__ == "__main__":
     #     np.save(f, results)
 
     nsims = 50  # amount of noise points
-    noise_range = np.linspace(0.001, 1, nsims)
-    nosc = 10**2
+    noise_range = np.linspace(0, 3, nsims)
+    dim1 = 7
+    nosc = dim1**2
     mat_coupl = square_nn_coupling(nosc)
     ssn = 60
 
@@ -74,7 +75,7 @@ if __name__ == "__main__":
         subargs = list(it.product(eigen_freqs, [pos_ini]))
         args = [tuple(list(subargs[i])+[noise_range[i]]) for i in range(nsims)]
         print(f'Calculating run {k+1} out of {averageingnum}')
-        results = parmap.starmap(multiprocessed_kuramoto, args, pm_pbar=True, pm_processes=min(4, nsims))  # multiprocessing
+        results = parmap.starmap(multiprocessed_kuramoto, args, pm_pbar=True, pm_processes=min(6, nsims))  # multiprocessing
 
         noises = []
         orderplot = []
@@ -95,10 +96,12 @@ if __name__ == "__main__":
             orderplot.append(np.average(suborders[-ssn:]))
 
         orders += np.array(orderplot)/averageingnum
-    with open('10x10 full result 240s quenched 1div15dt frsk.pkl', 'wb') as f:  # save data
+    with open(f'{dim1}x{dim1} full result quenched 240s 1div15dt frsk.pkl', 'wb') as f:  # save data
         pickle.dump(full_order_result, f)
-    with open('10x10 velocity result 240s quenched 1div15dt frsk.pkl', 'wb') as f:  # save data
+    with open(f'{dim1}x{dim1} velocity result quenched 240s 1div15dt frsk.pkl', 'wb') as f:  # save data
         pickle.dump(full_velocity_result, f)
+    with open(f'{dim1}x{dim1} factor result quenched 240s 1div15dt frsk.pkl', 'wb') as f:  # save data
+        pickle.dump(factors, f)
     # plt.figure()
     # plt.hist()
     plt.xlabel('Noise-strength D')
@@ -119,7 +122,7 @@ if __name__ == "__main__":
 
     plt.figure()
     plt.plot(orders, factors, label='Simulated')
-    plt.plot(orders, fractionapprox(orders, noise_range), label='Approximated')
+    #plt.plot(orders, fractionapprox(orders, noise_range), label='Approximated')
     plt.plot(orders, erf(orders/(noise_range*np.sqrt(2))), label='Erf approx')
     plt.legend()
     plt.xlabel('Order parameter $r$')
@@ -127,7 +130,7 @@ if __name__ == "__main__":
 
     plt.figure()
     plt.plot(noise_range/orders, factors, label='Simulated')
-    plt.plot(noise_range/orders, fractionapprox(orders, noise_range), label='Approximated')
+    #plt.plot(noise_range/orders, fractionapprox(orders, noise_range), label='Approximated')
     plt.plot(noise_range/orders, erf(orders/(noise_range*np.sqrt(2))), label='Erf approx')
     plt.legend()
     plt.xlabel('$\\sigma/Kr$')

@@ -8,6 +8,25 @@ import itertools as it
 import parmap as pm
 
 
+def finder(a):
+    c = np.concatenate([a, a])
+    N = len(a)
+    b = np.roll(c, 1)
+    rmax, lmax = None, None
+    temp = 0
+    mu = np.repeat(np.mean(a), 2 * N)
+    for r in range(1, 1 + N):
+        for l in range(r, r + N):
+            calc = np.abs(np.sum(mu[r:l + 1] - b[r:l + 1]))
+            if calc > temp:
+                temp = np.abs(np.sum(mu[r:l + 1] - b[r:l + 1]))
+                rmax, lmax = r, l
+                print(temp, r, l)
+    print(f"rmax={rmax}, lmax={lmax}, Ks={temp}, n*={lmax + 1 - rmax}")
+    new_arr = np.roll(c, 1-rmax)
+    return rmax, lmax, lmax + 1 - rmax, temp, new_arr
+
+
 def separation(mu1, mu2, sig1, sig2):
     return np.abs(mu1 - mu2) / (2 * (sig1 + sig2))
 
@@ -22,9 +41,9 @@ def multiprocessed_kuramoto(sigma, mat, mean_array, av_length, number_of_bins, h
                             n_strength):  # we define a function so that we can multiprocess
     eigenfreqs = np.random.normal(mean_array, sigma)
     # initpos = np.random.uniform(-np.pi, np.pi, len(mean_array))
-    d1 = np.repeat(np.random.uniform(-np.pi,np.pi,int(len(mean_array)/2)))
-    d2 = np.repeat(np.random.uniform(-np.pi,np.pi,int(len(mean_array)/2)))
-    initpos = np.append(d1,d2)
+    d1 = np.repeat(np.random.uniform(-np.pi, np.pi, int(len(mean_array) / 2)))
+    d2 = np.repeat(np.random.uniform(-np.pi, np.pi, int(len(mean_array) / 2)))
+    initpos = np.append(d1, d2)
     model = Kuramoto(eigenfreqs, initpos, matrix_coupling,
                      coupling_fun_kwargs=dict(mat=mat), noise_fun_kwargs=dict(D=n_strength))
     prms = {'timespan': 4 * 60, 'stepsize': 1 / 15}
@@ -40,6 +59,11 @@ def matrix_coupling(n, mat=''):
 
 
 if __name__ == "__main__":
+    ring_left = np.array([1.98725176, -2.06287988, 1.93896729, -0.14578174, 1.60407108,
+                          -4.36029618, -13.67023732, -0.82889337, 2.78286337, 3.05041795])
+    ring_right = np.array([9.5251671, -5.87193306, -2.50697559, -0.98473714, 1.3264844,
+                           -9.50824015, -1.79208611, 0.28492023, -5.1938431, -1.38382884])
+    ring_paper = np.array([6.9, 2.8, -0.4, -2.6, 1.3, -6.8, 0.8, -1.6, -9.5, -6.7])
     halter_size = 10
     conn_length = 0
     ssn = 60
@@ -90,7 +114,7 @@ if __name__ == "__main__":
                 sep_array += np.array(sep_lst) / averaging_number
             except Exception:
                 sep_array = np.array(sep_lst) / averaging_number
-        xax = np.linspace(0,4*60,len(sep_array))
+        xax = np.linspace(0, 4 * 60, len(sep_array))
         plt.plot(xax, sep_array, label=f'{noise}')
         plt.xlabel('Time (s)')
         plt.ylabel('Separation parameter')
